@@ -3,11 +3,13 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/websocket/v2"
+	"github.com/joho/godotenv"
 	"github.com/nedpals/supabase-go"
 )
 
@@ -28,9 +30,13 @@ type Message struct {
 var clients = make(map[*websocket.Conn]bool)
 
 func main() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Print("Error loading .env file: %v", err)
+	}
 	// Supabase conn
-	supabaseURL := "https://bhddowrlsurohkzttrhw.supabase.co"
-	supabaseKey := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJoZGRvd3Jsc3Vyb2hrenR0cmh3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTY5OTYwNjM5MiwiZXhwIjoyMDE1MTgyMzkyfQ.8x4O5u9gh0veGM4CNoO-RxK_vjFbHTf-d6mjL1n12wk"
+	supabaseURL := os.Getenv("SUPABASE_URL")
+	supabaseKey := os.Getenv("SUPABASE_KEY")
 	client := supabase.CreateClient(supabaseURL, supabaseKey)
 
 	app := fiber.New()
@@ -41,8 +47,9 @@ func main() {
 	app.Get("/fetch-messages", FetchMessagesHandler(client))
 	app.Get("/ws", WebSocketHandler())
 
-	fmt.Println("Server is running on :3000")
-	log.Fatal(app.Listen(":3000"))
+	port := os.Getenv("PORT")
+	fmt.Println("Server is running on", port)
+	log.Fatal(app.Listen(":" + port))
 }
 
 // SendMessageHandler send Message to supabase
