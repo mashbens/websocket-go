@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
@@ -10,8 +11,11 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/websocket/v2"
 	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 	"github.com/nedpals/supabase-go"
 )
+
+var db *sql.DB
 
 type Message struct {
 	ID         uint      `gorm:"primaryKey" json:"id"`
@@ -34,6 +38,20 @@ func main() {
 	if err != nil {
 		log.Print("Error loading .env file: %v", err)
 	}
+
+	// dbconn := os.Getenv("DB_CONNECTION_STRING")
+	// db, err := sql.Open("postgres", dbconn)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// defer db.Close()
+
+	// // Run migration script to create table
+	// err = migrateDB(db)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+
 	// Supabase conn
 	supabaseURL := os.Getenv("SUPABASE_URL")
 	supabaseKey := os.Getenv("SUPABASE_KEY")
@@ -61,12 +79,29 @@ func SendMessageHandler(client *supabase.Client) fiber.Handler {
 		if err := c.BodyParser(&msg); err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
 		}
+
+		// Validate required fields
+		if msg.SenderID == 0 || msg.ReceiverID == 0 || msg.Message == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "All fields must be provided"})
+		}
+
+		// Insert into SQLite database if needed
+		// _, e := db.Exec(`
+		// 	INSERT INTO messages (sender_id, receiver_id, message, timestamp)
+		// 	VALUES (?, ?, ?, ?)`,
+		// 	msg.SenderID, msg.ReceiverID, msg.Message, msg.Timestamp)
+
+		// if e != nil {
+		// 	log.Println("Failed to insert message into SQLite:", e)
+		// 	return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to insert message"})
+		// }
+
 		err := client.DB.From("messages").Insert([]map[string]interface{}{
 			{
 				"sender_id":   msg.SenderID,
 				"receiver_id": msg.ReceiverID,
 				"message":     msg.Message,
-				"timestamp":   msg.Timestamp,
+				"timestamp":   time.Now(),
 			},
 		}).Execute(&res)
 		if err != nil {
@@ -139,4 +174,23 @@ func WebSocketHandler() fiber.Handler {
 			}
 		}
 	})
+}
+
+func migrateDB(db *sql.DB) error {
+	// Create table
+	createTableSQL := `
+	CREATE TABLE IF NOT EXISTS messages (
+		id SERIAL PRIMARY KEY,
+		sender_id INTEGER NOT NULL,
+		receiver_id INTEGER NOT NULL,
+		message TEXT NOT NULL,
+		timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);
+	`
+	_, err := db.Exec(createTableSQL)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
